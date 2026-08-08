@@ -505,7 +505,7 @@ export default function App() {
         <div className="brand">
           <div className="brand__mark"><Layers size={18} /></div>
           <div>
-            <div className="brand__name">Completed Project Plan Finder</div>
+            <div className="brand__name">Project Plan Finder</div>
             <div className="brand__sub">Approved plan-set reference · residential design-build</div>
           </div>
         </div>

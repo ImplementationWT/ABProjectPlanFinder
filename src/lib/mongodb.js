@@ -12,24 +12,17 @@ function connect() {
   return client.connect();
 }
 
-// Devuelve la promesa de conexión activa. Si una conexión anterior falló
-// (p. ej. un corte de red pasajero), la descartamos para que el siguiente
-// intento abra una conexión nueva en vez de repetir el mismo error para siempre.
+// Usamos siempre `global` para cachear la promesa de conexión, tanto en
+// desarrollo (por el hot-reload) como en producción (para reutilizar la
+// conexión entre invocaciones del mismo contenedor/instancia serverless).
 function getClientPromise() {
-  if (process.env.NODE_ENV === "development") {
-    // En desarrollo, Next.js recarga módulos (hot reload), así que guardamos
-    // la conexión en una variable global para no abrir una conexión nueva
-    // en cada recarga.
-    if (!global._mongoClientPromise) {
-      global._mongoClientPromise = connect().catch((err) => {
-        global._mongoClientPromise = null;
-        throw err;
-      });
-    }
-    return global._mongoClientPromise;
+  if (!global._mongoClientPromise) {
+    global._mongoClientPromise = connect().catch((err) => {
+      global._mongoClientPromise = null;
+      throw err;
+    });
   }
-  // En producción, es mejor evitar la variable global.
-  return connect();
+  return global._mongoClientPromise;
 }
 
 export default getClientPromise;
