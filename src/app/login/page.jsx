@@ -37,7 +37,7 @@ export default function LoginPage() {
       <form className="login__card" onSubmit={onSubmit}>
         <div className="login__mark"><Layers size={20} /></div>
         <div className="login__title">Project Plan Finder</div>
-        <div className="login__sub">Ingresa la contraseña para continuar</div>
+        <div className="login__sub">Enter password to continue</div>
 
         <label className="login__field">
           <Lock size={15} />

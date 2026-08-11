@@ -3,10 +3,11 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import {
   Upload, Search, Trash2, Pencil, Eye, FileText,
   X, Check, AlertTriangle, Layers, MapPin, Ruler, Home, Car, Sparkles,
-  Database, ShieldAlert, ChevronDown, Send
+  Database, ShieldAlert, ChevronDown, Send, LogOut
 } from "lucide-react";
 
 const WEBHOOK_URL = process.env.NEXT_PUBLIC_WEBHOOK_URL;
+const DELETE_PASSWORD = "ABMaster123!";
 
 const SPECIAL_ROOMS = [
   "Theater", "Gym", "Office", "Sauna", "Wine Cellar",
@@ -497,6 +498,14 @@ export default function App() {
 
   const list = projects || [];
 
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } finally {
+      window.location.href = "/login";
+    }
+  }, []);
+
   return (
     <div className="app">
       <style>{CSS}</style>
@@ -506,9 +515,9 @@ export default function App() {
           <div className="brand__mark"><Layers size={18} /></div>
           <div>
             <div className="brand__name">Project Plan Finder</div>
-            <div className="brand__sub">Approved plan-set reference · residential design-build</div>
           </div>
         </div>
+        <button className="btn btn--ghost" onClick={logout}><LogOut size={15} /> Log out</button>
       </header>
 
       <main className="main">
@@ -559,6 +568,8 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
   const [editing, setEditing] = useState(null);
   const [selected, setSelected] = useState(() => new Set());
   const [dialog, setDialog] = useState(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -568,6 +579,12 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
         .filter(Boolean).join(" ").toLowerCase().includes(q)
     );
   }, [projects, query]);
+
+  useEffect(() => { setPage(1); }, [query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // keep selection in sync if projects change underneath it
   useEffect(() => {
@@ -604,6 +621,7 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
     setDialog({
       title: "Delete project",
       message: `Delete “${p ? p.projectName : "this project"}” from the database? This can't be undone.`,
+      requirePassword: true,
       actions: [
         { label: "Cancel", kind: "ghost" },
         { label: "Delete", kind: "danger", icon: <Trash2 size={15} />, onClick: () => setProjects((ps) => ps.filter((x) => x.id !== id)) },
@@ -617,6 +635,7 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
     setDialog({
       title: "Delete selected projects",
       message: `Delete ${n} selected project${n > 1 ? "s" : ""} from the database? This can't be undone.`,
+      requirePassword: true,
       actions: [
         { label: "Cancel", kind: "ghost" },
         { label: `Delete ${n}`, kind: "danger", icon: <Trash2 size={15} />, onClick: () => { setProjects((ps) => ps.filter((p) => !selected.has(p.id))); setSelected(new Set()); } },
@@ -650,7 +669,7 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
       <div className="searchbar">
         <Search size={16} />
         <input
-          placeholder="Search by name, address, job no., APN, city, style…"
+          placeholder="Search by Address or City"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -698,7 +717,7 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p) => (
+              {paged.map((p) => (
                 <tr key={p.id} className={selected.has(p.id) ? "is-selected" : ""}>
                   <td className="check-col">
                     <input
@@ -731,6 +750,7 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
               ))}
             </tbody>
           </table>
+          <Paginator page={currentPage} totalPages={totalPages} onChange={setPage} />
         </div>
       )}
 
@@ -742,6 +762,18 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
       )}
       <ConfirmDialog dialog={dialog} onClose={() => setDialog(null)} />
     </section>
+  );
+}
+
+function Paginator({ page, totalPages, onChange }) {
+  if (totalPages <= 1) return null;
+  const go = (p) => onChange(Math.min(totalPages, Math.max(1, p)));
+  return (
+    <div className="paginator">
+      <button className="btn btn--ghost" onClick={() => go(page - 1)} disabled={page <= 1}>Previous</button>
+      <span className="paginator__status">Page {page} of {totalPages}</span>
+      <button className="btn btn--ghost" onClick={() => go(page + 1)} disabled={page >= totalPages}>Next</button>
+    </div>
   );
 }
 
@@ -836,7 +868,7 @@ function BuildingByFloor({ p }) {
   return (
     <div className="group">
       <div className="group__title">
-        <Layers size={14} /> Building per floor{totalArea > 0 ? ` · ${fmt(totalArea)} sf total` : ""}
+        <Layers size={14} /> Rooms per floor/section
       </div>
       <div className="floors">
         {floors.map((f) => (
@@ -1424,16 +1456,55 @@ function Modal({ title, subtitle, headerExtra, children, footer, onClose, size }
 
 /* in-app confirm / notice dialog (native window.confirm is blocked in the sandbox) */
 function ConfirmDialog({ dialog, onClose }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setPassword("");
+    setError("");
+  }, [dialog]);
+
   if (!dialog) return null;
+
+  const runAction = (a) => {
+    if (dialog.requirePassword && a.kind === "danger") {
+      if (password !== DELETE_PASSWORD) {
+        setError("Incorrect password.");
+        return;
+      }
+    }
+    a.onClick && a.onClick();
+    onClose();
+  };
+
   return (
     <Modal title={dialog.title} onClose={onClose} size="sm"
       footer={(dialog.actions || []).map((a, i) => (
         <button key={i} className={"btn" + (a.kind === "danger" ? " btn--danger" : a.kind === "ghost" ? " btn--ghost" : "")}
-          onClick={() => { a.onClick && a.onClick(); onClose(); }}>
+          onClick={() => runAction(a)}>
           {a.icon}{a.label}
         </button>
       ))}>
       <p className="dialog-msg">{dialog.message}</p>
+      {dialog.requirePassword && (
+        <label className="inp" style={{ marginTop: 14 }}>
+          <span className="inp__label">Password</span>
+          <input
+            type="password"
+            autoFocus
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(""); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const dangerAction = (dialog.actions || []).find((a) => a.kind === "danger");
+                if (dangerAction) runAction(dangerAction);
+              }
+            }}
+            placeholder="Enter password to confirm"
+          />
+        </label>
+      )}
+      {error && <p className="dialog-error">{error}</p>}
     </Modal>
   );
 }
@@ -1568,6 +1639,12 @@ const CSS = `
 .bulkbar__actions{display:flex; gap:8px}
 .bulkbar .btn--ghost{background:rgba(255,255,255,.12); color:#fff; border-color:rgba(255,255,255,.25)}
 .bulkbar .btn--ghost:hover{background:rgba(255,255,255,.2); color:#fff}
+
+.paginator{
+  display:flex; align-items:center; justify-content:center; gap:16px;
+  padding:12px 14px; border-top:1px solid var(--line); background:var(--surface2);
+}
+.paginator__status{font-size:12.5px; color:var(--muted); font-weight:500}
 
 .check-col{width:40px; text-align:center !important}
 .table input[type="checkbox"]{width:16px; height:16px; accent-color:var(--accent); cursor:pointer; vertical-align:middle}
@@ -1750,6 +1827,7 @@ const CSS = `
 .modal{background:var(--surface); border-radius:16px; width:100%; max-width:760px; border:1px solid var(--line); box-shadow:0 24px 60px rgba(0,0,0,.28); overflow:hidden; margin-bottom:40px}
 .modal--sm{max-width:440px}
 .dialog-msg{margin:0; font-size:14px; color:var(--ink2); line-height:1.55}
+.dialog-error{margin:10px 0 0; font-size:13px; color:var(--bad)}
 .modal__head{display:flex; justify-content:space-between; align-items:flex-start; gap:14px; padding:20px 22px; border-bottom:1px solid var(--line); background:var(--surface2)}
 .modal__title{font-family:var(--font-display); font-size:20px; font-weight:600; display:flex; align-items:center; gap:10px}
 .modal__sub{font-size:11.5px; color:var(--muted); margin-top:4px}
