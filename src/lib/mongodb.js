@@ -4,7 +4,7 @@ const uri = process.env.MONGODB_URI;
 const options = {};
 
 if (!uri) {
-  throw new Error("Falta la variable de entorno MONGODB_URI en .env.local");
+  throw new Error("Missing MONGODB_URI environment variable in .env.local");
 }
 
 function connect() {
@@ -12,9 +12,9 @@ function connect() {
   return client.connect();
 }
 
-// Usamos siempre `global` para cachear la promesa de conexión, tanto en
-// desarrollo (por el hot-reload) como en producción (para reutilizar la
-// conexión entre invocaciones del mismo contenedor/instancia serverless).
+// We always use `global` to cache the connection promise, both in
+// development (for hot-reload) and in production (to reuse the
+// connection across invocations of the same container/serverless instance).
 function getClientPromise() {
   if (!global._mongoClientPromise) {
     global._mongoClientPromise = connect().catch((err) => {

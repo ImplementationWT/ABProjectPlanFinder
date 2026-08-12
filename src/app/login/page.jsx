@@ -19,14 +19,14 @@ export default function LoginPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Contraseña incorrecta");
+        setError(data.error || "Incorrect password");
         setSubmitting(false);
         return;
       }
       // Hard navigation so the proxy re-checks the fresh session cookie.
       window.location.href = "/";
     } catch (err) {
-      setError("No se pudo conectar. Intenta de nuevo.");
+      setError("Failed to connect to the server");
       setSubmitting(false);
     }
   };
@@ -43,7 +43,7 @@ export default function LoginPage() {
           <Lock size={15} />
           <input
             type="password"
-            placeholder="Contraseña"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoFocus
@@ -56,7 +56,7 @@ export default function LoginPage() {
         )}
 
         <button type="submit" className="login__btn" disabled={submitting || !password}>
-          {submitting ? "Verificando…" : "Ingresar"}
+          {submitting ? "Verifying…" : "Login"}
         </button>
       </form>
     </div>

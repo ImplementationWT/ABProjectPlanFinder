@@ -5,7 +5,7 @@ export async function POST(request) {
   const { password } = await request.json();
 
   if (!password || password !== process.env.SITE_PASSWORD) {
-    return NextResponse.json({ error: "Contraseña incorrecta" }, { status: 401 });
+    return NextResponse.json({ error: "Incorrect password" }, { status: 401 });
   }
 
   const res = NextResponse.json({ ok: true });
