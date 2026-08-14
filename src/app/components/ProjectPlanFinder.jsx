@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import {
   Upload, Search, Trash2, Pencil, Eye, FileText,
   X, Check, AlertTriangle, Layers, MapPin, Ruler, Home, Car, Sparkles,
-  Database, ShieldAlert, ChevronDown, Send, LogOut
+  Database, ShieldAlert, ChevronDown, ChevronUp, ChevronsUpDown, Send, LogOut
 } from "lucide-react";
 
 const WEBHOOK_URL = process.env.NEXT_PUBLIC_WEBHOOK_URL;
@@ -126,6 +126,15 @@ function zoningOptionsForCity(city) {
 
 const SAMPLE_PROJECTS = [];
 
+
+const SORT_COLUMNS = {
+  projectName: { field: "projectName", type: "string" },
+  city: { field: "city", type: "string" },
+  lotArea: { field: "lotArea", type: "number" },
+  houseSqft: { field: "houseSqft", type: "number" },
+  stories: { field: "stories", type: "number" },
+  style: { field: "style", type: "string" },
+};
 
 /* ---------- helpers ------------------------------------------------ */
 
@@ -569,6 +578,7 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
   const [selected, setSelected] = useState(() => new Set());
   const [dialog, setDialog] = useState(null);
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState({ key: null, dir: "asc" });
   const PAGE_SIZE = 10;
 
   const filtered = useMemo(() => {
@@ -580,11 +590,31 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
     );
   }, [projects, query]);
 
-  useEffect(() => { setPage(1); }, [query]);
+  const sorted = useMemo(() => {
+    const col = SORT_COLUMNS[sort.key];
+    if (!col) return filtered;
+    return [...filtered].sort((a, b) => {
+      const av = a[col.field], bv = b[col.field];
+      const aEmpty = av == null || av === "";
+      const bEmpty = bv == null || bv === "";
+      if (aEmpty && bEmpty) return 0;
+      if (aEmpty) return 1;
+      if (bEmpty) return -1;
+      const cmp = col.type === "number"
+        ? Number(av) - Number(bv)
+        : String(av).localeCompare(String(bv), undefined, { sensitivity: "base" });
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => { setPage(1); }, [query, sort]);
+
+  const toggleSort = (key) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const paged = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // keep selection in sync if projects change underneath it
   useEffect(() => {
@@ -706,13 +736,13 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
                     onChange={toggleAllFiltered}
                   />
                 </th>
-                <th>Project</th>
-                <th>City</th>
-                <th className="num">Lot&nbsp;area</th>
-                <th className="num">House&nbsp;sf</th>
+                <SortableTh label="Project" sortKey="projectName" sort={sort} onSort={toggleSort} />
+                <SortableTh label="City" sortKey="city" sort={sort} onSort={toggleSort} />
+                <SortableTh label={<>Lot&nbsp;area</>} sortKey="lotArea" sort={sort} onSort={toggleSort} className="num" />
+                <SortableTh label={<>House&nbsp;sf</>} sortKey="houseSqft" sort={sort} onSort={toggleSort} className="num" />
                 <th className="num">Bd/Ba</th>
-                <th className="ta-c">Stories</th>
-                <th>Style</th>
+                <SortableTh label="Stories" sortKey="stories" sort={sort} onSort={toggleSort} className="ta-c" />
+                <SortableTh label="Style" sortKey="style" sort={sort} onSort={toggleSort} />
                 <th className="ta-r">Actions</th>
               </tr>
             </thead>
@@ -762,6 +792,20 @@ function DatabaseView({ projects, setProjects, go, storageOk, isUploading, uploa
       )}
       <ConfirmDialog dialog={dialog} onClose={() => setDialog(null)} />
     </section>
+  );
+}
+
+function SortableTh({ label, sortKey, sort, onSort, className }) {
+  const active = sort.key === sortKey;
+  return (
+    <th className={className}>
+      <button type="button" className={"th-sort" + (active ? " is-active" : "")} onClick={() => onSort(sortKey)}>
+        {label}
+        {active
+          ? (sort.dir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+          : <ChevronsUpDown size={12} className="th-sort__idle" />}
+      </button>
+    </th>
   );
 }
 
@@ -1620,6 +1664,16 @@ const CSS = `
 .table th.num,.table td.num{text-align:right}
 .table th.ta-r,.table td.ta-r{text-align:right}
 .table th.ta-c,.table td.ta-c{text-align:center}
+.th-sort{
+  display:inline-flex; align-items:center; gap:4px; width:100%;
+  background:none; border:none; padding:0; margin:0; cursor:pointer;
+  font:inherit; text-transform:inherit; letter-spacing:inherit; color:inherit;
+}
+.th-sort:hover{color:var(--ink)}
+.th-sort.is-active{color:var(--ink)}
+.th-sort__idle{opacity:.4}
+.table th.num .th-sort{justify-content:flex-end}
+.table th.ta-c .th-sort{justify-content:center}
 .table tbody td{padding:12px 14px; border-bottom:1px solid var(--line2); vertical-align:middle}
 .table tbody tr:last-child td{border-bottom:none}
 .table tbody tr:hover{background:var(--surface2)}
