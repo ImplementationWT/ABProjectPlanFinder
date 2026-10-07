@@ -950,8 +950,6 @@ const NUM_FIELDS = [
   "garageSpaces", "aduSize", "bedrooms", "bathrooms",
 ];
 
-const EDIT_FLOOR_LABELS = { basement: "Basement", first: "First floor", second: "Second floor", third: "Third floor", adu: "ADU" };
-
 function EditModal({ project, onClose, onSave }) {
   const [form, setForm] = useState(() => JSON.parse(JSON.stringify(project)));
 
@@ -1073,25 +1071,76 @@ function EditModal({ project, onClose, onSave }) {
       </div>
 
       <div className="group">
-        <div className="group__title"><Layers size={14} /> Rooms by floor</div>
-        <p className="edit-note" style={{ marginTop: 0 }}>One room per line, or comma-separated. Leave a floor blank if it doesn't apply.</p>
-        <div className="floors-edit">
-          {["basement", "first", "second", "third", "adu"].map((k) => (
-            <label key={k} className="inp">
-              <span className="inp__label">{EDIT_FLOOR_LABELS[k]}</span>
-              <textarea
-                rows={3}
-                value={((form.rooms && form.rooms[k]) || []).join("\n")}
-                onChange={(e) => setForm((f) => ({
-                  ...f,
-                  rooms: { ...(f.rooms || {}), [k]: e.target.value.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean) },
-                }))}
+        <div className="group__title"><Layers size={14} /> Rooms per floor/section</div>
+        <p className="edit-note" style={{ marginTop: 0 }}>Click a room to rename it, × to remove it, or type a new one and press Enter.</p>
+        <div className="floors">
+          {BUILDING_FLOOR_ORDER.map((k) => (
+            <div key={k} className="floor">
+              <div className="floor__head">{BUILDING_FLOOR_LABELS[k]}</div>
+              <RoomTagEditor
+                rooms={Array.isArray(form.roomsByFloor?.[k]) ? form.roomsByFloor[k] : []}
+                onChange={(rooms) => setForm((f) => ({ ...f, roomsByFloor: { ...(f.roomsByFloor || {}), [k]: rooms } }))}
               />
-            </label>
+            </div>
           ))}
         </div>
       </div>
     </Modal>
+  );
+}
+
+function RoomTagEditor({ rooms, onChange }) {
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [draft, setDraft] = useState("");
+  const [newRoom, setNewRoom] = useState("");
+
+  const startEdit = (i) => { setEditingIdx(i); setDraft(rooms[i]); };
+  const cancelEdit = () => setEditingIdx(null);
+  const commitEdit = () => {
+    if (editingIdx == null) return;
+    const name = draft.trim();
+    onChange(name ? rooms.map((r, i) => (i === editingIdx ? name : r)) : rooms.filter((_, i) => i !== editingIdx));
+    setEditingIdx(null);
+  };
+  const removeAt = (i) => onChange(rooms.filter((_, j) => j !== i));
+  const add = () => {
+    const name = newRoom.trim();
+    if (!name) return;
+    onChange([...rooms, name]);
+    setNewRoom("");
+  };
+
+  return (
+    <div className="floor__rooms">
+      {rooms.map((r, i) => editingIdx === i ? (
+        <input
+          key={i}
+          className="roomtag roomtag__input"
+          autoFocus
+          value={draft}
+          size={Math.max(draft.length, 4)}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
+            else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelEdit(); }
+          }}
+        />
+      ) : (
+        <span key={i} className="roomtag roomtag--edit">
+          <button type="button" className="roomtag__name" title="Rename" onClick={() => startEdit(i)}>{r}</button>
+          <button type="button" className="roomtag__remove" title={`Remove ${r}`} aria-label={`Remove ${r}`} onClick={() => removeAt(i)}><X size={11} /></button>
+        </span>
+      ))}
+      <input
+        className="roomtag roomtag__input roomtag__add"
+        placeholder="+ Add room"
+        value={newRoom}
+        onChange={(e) => setNewRoom(e.target.value)}
+        onBlur={add}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+      />
+    </div>
   );
 }
 
@@ -1773,9 +1822,14 @@ const CSS = `
 .floor__count{font-family:var(--font-mono); font-size:10px; color:#fff; background:var(--brass); border-radius:20px; padding:1px 7px; letter-spacing:0}
 .floor__rooms{display:flex; flex-wrap:wrap; gap:6px}
 .roomtag{font-size:11.5px; color:var(--ink2); background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:3px 9px}
-.floors-edit{display:grid; grid-template-columns:1fr 1fr; gap:13px}
-.floors-edit textarea{font-family:var(--font-body); font-size:12.5px; color:var(--ink); padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--surface); outline:none; resize:vertical; line-height:1.5}
-.floors-edit textarea:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(30,59,51,.1)}
+.roomtag--edit{display:inline-flex; align-items:center; gap:4px; padding:0 4px 0 0}
+.roomtag__name{font:inherit; color:inherit; background:none; border:0; padding:3px 0 3px 9px; cursor:text}
+.roomtag__name:hover{text-decoration:underline dotted}
+.roomtag__remove{display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:0; border-radius:4px; background:none; color:var(--ink2); cursor:pointer; padding:0}
+.roomtag__remove:hover{background:var(--line2); color:var(--bad)}
+.roomtag__input{font-family:var(--font-body); color:var(--ink); outline:none; min-width:60px}
+.roomtag__input:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(30,59,51,.1)}
+.roomtag__add{border-style:dashed; width:110px}
 
 /* sim banner */
 .sim-banner{
@@ -1901,7 +1955,7 @@ const CSS = `
   .h1{font-size:25px}
 }
 @media(max-width:520px){
-  .group__grid,.edit-grid,.formgroup__grid,.staged-card__grid,.floors-edit{grid-template-columns:1fr}
+  .group__grid,.edit-grid,.formgroup__grid,.staged-card__grid{grid-template-columns:1fr}
   .main{padding:22px 16px 10px}
   .table thead{display:none}
   .table tbody td{display:block; text-align:left; padding:6px 14px; border:none}
